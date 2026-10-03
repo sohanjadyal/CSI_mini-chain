@@ -9,7 +9,20 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+
 class BlockchainTest {
+
+    private static KeyPair getWallet() {
+        try {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(1024);
+            return generator.generateKeyPair();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Test
     void startsWithGenesisBlock() {
@@ -29,7 +42,8 @@ class BlockchainTest {
     void paymentsMoveCoins() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
-        chain.addTransaction(new Transaction("asha", "ravi", 20));
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("meera");
         assertEquals(30, chain.balanceOf("asha"));
         assertEquals(20, chain.balanceOf("ravi"));
@@ -40,22 +54,25 @@ class BlockchainTest {
     void cannotSpendMoreThanYouHave() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(new Transaction("asha", "ravi", 60)));
+        KeyPair ashaWallet = getWallet();
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "ravi", 60, ashaWallet.getPrivate(), ashaWallet.getPublic())));
     }
 
     @Test
     void cannotPayYourself() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(new Transaction("asha", "asha", 5)));
+        KeyPair ashaWallet = getWallet();
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "asha", 5, ashaWallet.getPrivate(), ashaWallet.getPublic())));
     }
 
     @Test
     void cannotSpendQueuedCoins() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
-        chain.addTransaction(new Transaction("asha", "ravi", 40));
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(new Transaction("asha", "meera", 40)));
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 40, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "meera", 40, ashaWallet.getPrivate(), ashaWallet.getPublic())));
         assertEquals(1, chain.getPending().size());
     }
 
@@ -73,12 +90,40 @@ class BlockchainTest {
     }
 
     @Test
-    void changingAPaymentIsDetected() {
+    void tamperedAmountInvalidatesChain() {
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
         Block block = chain.getChain().get(1);
         Transaction original = block.getTransactions().get(0);
-        block.getTransactions().set(0, new Transaction(original.id(), original.from(), original.to(), 1_000_000));
+        
+        // Hacker changes the amount to 1,000,000 and keeps the original signature
+        block.getTransactions().set(0, new Transaction(original.id(), original.from(), original.to(), 1_000_000, original.senderKey(), original.signature()));
+        
+        // Hacker tries to be sneaky and re-mines the block so the hashes look correct!
+        block.mine(2);
+        
+        // The chain STILL rejects it because the digital signature is broken
+        assertFalse(chain.isValid());
+    }
+
+    @Test
+    void forgedSenderInvalidatesChain() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.minePending("miner");
+        
+        Block block = chain.getChain().get(2);
+        Transaction original = block.getTransactions().get(0);
+        
+        // Hacker tries to forge the sender to be "hacker" instead of "asha"
+        block.getTransactions().set(0, new Transaction(original.id(), "hacker", original.to(), original.amount(), original.senderKey(), original.signature()));
+        
+        // Hacker re-mines the block to fix the hashes
+        block.mine(2);
+        
+        // The chain STILL rejects it because the signature doesn't match the new sender name
         assertFalse(chain.isValid());
     }
 

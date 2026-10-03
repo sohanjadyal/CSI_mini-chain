@@ -8,7 +8,7 @@ import java.util.Map;
 
 // bump version only for incompatible changes, adding a field is safe
 public class Blockchain implements Serializable {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     public static final int MINING_REWARD = 50;
 
@@ -29,6 +29,9 @@ public class Blockchain implements Serializable {
     public Block latestBlock() { return chain.get(chain.size() - 1); }
 
     public void addTransaction(Transaction tx) {
+        if (!tx.hasValidSignature()) {
+            throw new IllegalArgumentException("Transaction signature is invalid.");
+        }
         if (tx.from() == null || tx.from().isBlank() || tx.to() == null || tx.to().isBlank()) {
             throw new IllegalArgumentException("A payment needs a sender and a receiver.");
         }
@@ -82,6 +85,9 @@ public class Blockchain implements Serializable {
             if (!block.getHash().equals(block.computeHash())) return false;
             if (!block.getPreviousHash().equals(previous.getHash())) return false;
             if (!block.getHash().startsWith(target)) return false;
+            for (Transaction tx : block.getTransactions()) {
+                if (!tx.hasValidSignature()) return false;
+            }
         }
         return true;
     }
