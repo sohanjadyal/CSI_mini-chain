@@ -1,11 +1,14 @@
 package minichain;
 
+import java.nio.file.Path;
 import java.util.Scanner;
 
 /** Menu for trying out the chain from the terminal. */
 public class Main {
+    private static final Path SAVE_FILE = Path.of("chain.dat");
+
     public static void main(String[] args) {
-        Blockchain chain = new Blockchain(4);
+        Blockchain chain = Storage.load(SAVE_FILE, 4);
         Scanner in = new Scanner(System.in);
         System.out.println("mini-chain. Mine a block first to get some coins.");
 
@@ -21,7 +24,10 @@ public class Main {
                     7. Tamper with a block
                     8. Quit""");
             System.out.print("> ");
-            if (!in.hasNextLine()) return;
+            if (!in.hasNextLine()) {
+                Storage.save(chain, SAVE_FILE);
+                return;
+            }
             String choice = in.nextLine().trim();
             try {
                 switch (choice) {
@@ -37,6 +43,7 @@ public class Main {
                         System.out.println("Mining...");
                         Block block = chain.minePending(miner);
                         System.out.println("Mined block " + block.getIndex() + " after " + block.getNonce() + " tries: " + block.getHash());
+                        Storage.save(chain, SAVE_FILE);
                     }
                     case "3" -> {
                         for (Block block : chain.getChain()) {
@@ -64,9 +71,9 @@ public class Main {
                         }
                         Transaction original = block.getTransactions().get(0);
                         block.getTransactions().set(0, new Transaction(original.id(), original.from(), original.to(), 1_000_000));
-                        System.out.println("Changed \"" + original + "\" to \"" + block.getTransactions().get(0) + "\". Now check if the chain is valid!");
+                        System.out.println("Changed \"" + original + "\" to \"" + block.getTransactions().get(0) + "\". Now check if the chain is valid! Saving is now off for this run.");
                     }
-                    case "8" -> { return; }
+                    case "8" -> { Storage.save(chain, SAVE_FILE); return; }
                     default -> System.out.println("Please pick 1-8.");
                 }
             } catch (NumberFormatException e) {

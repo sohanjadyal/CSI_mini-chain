@@ -2,7 +2,12 @@ package minichain;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class BlockchainTest {
 
@@ -92,5 +97,64 @@ class BlockchainTest {
         chain.minePending("ravi");
         chain.getChain().get(2).tamperPreviousHash("f".repeat(64));
         assertFalse(chain.isValid());
+    }
+
+    @Test
+    void savedChainReloads(@TempDir Path dir) {
+        Path file = dir.resolve("chain.dat");
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+        Storage.save(chain, file);
+
+        Blockchain loaded = Storage.load(file, 2);
+        assertTrue(loaded.isValid());
+        assertEquals(2, loaded.getDifficulty());
+        assertEquals(chain.getChain().size(), loaded.getChain().size());
+        assertEquals(chain.latestBlock().getHash(), loaded.latestBlock().getHash());
+        assertEquals(50, loaded.balanceOf("asha"));
+    }
+
+    @Test
+    void queuedPaymentsStayQueuedAfterReload(@TempDir Path dir) {
+        Path file = dir.resolve("chain.dat");
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+        chain.addTransaction(new Transaction("asha", "ravi", 20));
+        Storage.save(chain, file);
+
+        Blockchain loaded = Storage.load(file, 2);
+        assertEquals(1, loaded.getPending().size());
+        assertEquals(2, loaded.getChain().size());
+        assertEquals(30, loaded.balanceOf("asha"));
+    }
+
+    @Test
+    void tamperedChainIsNotSaved(@TempDir Path dir) {
+        Path file = dir.resolve("chain.dat");
+        Blockchain good = new Blockchain(2);
+        good.minePending("asha");
+        Storage.save(good, file);
+
+        Blockchain tampered = new Blockchain(2);
+        tampered.minePending("ravi");
+        tampered.getChain().get(1).tamperPreviousHash("f".repeat(64));
+        Storage.save(tampered, file);
+
+        Blockchain loaded = Storage.load(file, 2);
+        assertEquals(2, loaded.getChain().size());
+        assertEquals(50, loaded.balanceOf("asha"));
+    }
+
+    @Test
+    void missingOrUnreadableFileStartsANewChain(@TempDir Path dir) throws IOException {
+        Path file = dir.resolve("chain.dat");
+        Blockchain fresh = Storage.load(file, 2);
+        assertEquals(2, fresh.getDifficulty());
+        assertEquals(1, fresh.getChain().size());
+
+        Files.writeString(file, "not a chain");
+        Blockchain afterGarbage = Storage.load(file, 2);
+        assertEquals(2, afterGarbage.getDifficulty());
+        assertEquals(1, afterGarbage.getChain().size());
     }
 }

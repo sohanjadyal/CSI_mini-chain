@@ -13,6 +13,8 @@ mvn test
 
 Try mining a block, tampering with it (option 7), then checking if the chain is valid (option 6).
 
+Run it again and it picks up where you left off. The chain is saved to a file called `chain.dat` in the project folder, delete that file to start over.
+
 ## The idea
 
 Each block stores some payments, the hash of the previous block, and its own hash. The hash is computed from the block's contents, so changing anything changes it, and the next block's link no longer matches. Mining means trying different nonces until the hash starts with enough zeros, which makes rewriting old blocks expensive.
@@ -32,6 +34,17 @@ Mining
 Validation
 - `isValid()` returns false if anything in any mined block was changed, including block 1.
 
+## Saving
+
+The chain is kept in a file called `chain.dat` in the project folder.
+
+- The file is written every time you mine a block, and again when you quit.
+- Starting the program loads that file, including payments that are still waiting to be mined.
+- A chain that fails the validity check is never written, so the file always holds the last chain that passed. Tamper with a block, quit, and the next run loads the untampered chain.
+- The file is a Java serialized object, so it's binary and you can't read it in a text editor.
+- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead.
+- Deleting `chain.dat` starts you over.
+
 ## Code
 
 All in `src/main/java/minichain/`:
@@ -39,6 +52,7 @@ All in `src/main/java/minichain/`:
 - `Transaction.java`: a payment
 - `Block.java`: hashing and mining
 - `Blockchain.java`: payments, balances, validation
+- `Storage.java`: saving and loading the chain
 - `Main.java`: the menu
 
 Tests are in `src/test/java/minichain/`.

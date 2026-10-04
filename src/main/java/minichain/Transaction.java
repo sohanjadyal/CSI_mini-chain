@@ -1,8 +1,11 @@
 package minichain;
 
+import java.io.Serializable;
 import java.util.UUID;
 
-public record Transaction(String id, String from, String to, int amount) {
+// bump version only for incompatible changes, adding a field is safe
+public record Transaction(String id, String from, String to, int amount) implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     // Sender used for mining rewards.
     public static final String NETWORK = "network";

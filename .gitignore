@@ -2,6 +2,7 @@
 target/
 *.class
 *.jar
+chain.dat
 
 # Editors and AI assistants
 .vscode/
