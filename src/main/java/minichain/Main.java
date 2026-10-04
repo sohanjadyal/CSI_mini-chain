@@ -1,11 +1,29 @@
 package minichain;
 
 import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 /** Menu for trying out the chain from the terminal. */
 public class Main {
     private static final Path SAVE_FILE = Path.of("chain.dat");
+
+    private static final Map<String, KeyPair> wallets = new HashMap<>();
+
+    private static KeyPair getWallet(String name) {
+        return wallets.computeIfAbsent(name, k -> {
+            try {
+                KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+                generator.initialize(1024);
+                return generator.generateKeyPair();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
 
     public static void main(String[] args) {
         Blockchain chain = Storage.load(SAVE_FILE, 4);
@@ -35,7 +53,8 @@ public class Main {
                         String from = ask(in, "From: ");
                         String to = ask(in, "To: ");
                         int amount = Integer.parseInt(ask(in, "Amount: "));
-                        chain.addTransaction(new Transaction(from, to, amount));
+                        KeyPair wallet = getWallet(from);
+                        chain.addTransaction(Transaction.create(from, to, amount, wallet.getPrivate(), wallet.getPublic()));
                         System.out.println("Queued. It's confirmed when the next block is mined.");
                     }
                     case "2" -> {
@@ -70,8 +89,11 @@ public class Main {
                             continue;
                         }
                         Transaction original = block.getTransactions().get(0);
-                        block.getTransactions().set(0, new Transaction(original.id(), original.from(), original.to(), 1_000_000));
+                        block.getTransactions().set(0, new Transaction(original.id(), original.from(), original.to(), 1_000_000, original.senderKey(), original.signature()));
                         System.out.println("Changed \"" + original + "\" to \"" + block.getTransactions().get(0) + "\". Now check if the chain is valid! Saving is now off for this run.");
+                        System.out.println("Re-mining the block to hide the hack (fixing the block hash)...");
+                        block.mine(chain.getDifficulty());
+                        System.out.println("Hash fixed! Now use option 6 to see if the Digital Signatures catch it!");
                     }
                     case "8" -> { Storage.save(chain, SAVE_FILE); return; }
                     default -> System.out.println("Please pick 1-8.");

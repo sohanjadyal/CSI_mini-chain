@@ -10,7 +10,7 @@ import java.util.List;
 
 // bump version only for incompatible changes, adding a field is safe
 public class Block implements Serializable {
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final int index;
     private final long timestamp;

@@ -26,6 +26,7 @@ Payments
 - You can't pay yourself.
 - You can't spend more than you have, and that includes payments you've already made that aren't mined yet.
 - Someone who has never received anything has a balance of 0.
+- Note on Security: The system uses digital signatures to prevent forging transactions. However, for demo purposes, the interactive menu automatically fetches or generates the private key for any name you type as the sender. In a real application, users would hold their own private keys.
 
 Mining
 - A mined block holds all waiting payments plus a 50 coin reward for the miner.
