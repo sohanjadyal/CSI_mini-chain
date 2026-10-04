@@ -1,6 +1,7 @@
 package minichain;
 
 import java.io.Serializable;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,6 +16,7 @@ public class Blockchain implements Serializable {
     private final int difficulty;
     private final List<Block> chain = new ArrayList<>();
     private final List<Transaction> pending = new ArrayList<>();
+    private final Map<String, PublicKey> knownKeys = new HashMap<>();
 
     public Blockchain(int difficulty) {
         this.difficulty = difficulty;
@@ -31,6 +33,14 @@ public class Blockchain implements Serializable {
     public void addTransaction(Transaction tx) {
         if (!tx.hasValidSignature()) {
             throw new IllegalArgumentException("Transaction signature is invalid.");
+        }
+        if (!Transaction.NETWORK.equals(tx.from())) {
+            PublicKey known = knownKeys.get(tx.from());
+            if (known == null) {
+                knownKeys.put(tx.from(), tx.senderKey());
+            } else if (!known.equals(tx.senderKey())) {
+                throw new IllegalArgumentException("Transaction uses a different key than the registered key for sender: " + tx.from());
+            }
         }
         if (tx.from() == null || tx.from().isBlank() || tx.to() == null || tx.to().isBlank()) {
             throw new IllegalArgumentException("A payment needs a sender and a receiver.");
@@ -79,6 +89,7 @@ public class Blockchain implements Serializable {
 
     public boolean isValid() {
         String target = "0".repeat(difficulty);
+        Map<String, PublicKey> keys = new HashMap<>();
         for (int i = 1; i < chain.size(); i++) {
             Block block = chain.get(i);
             Block previous = chain.get(i - 1);
@@ -87,6 +98,14 @@ public class Blockchain implements Serializable {
             if (!block.getHash().startsWith(target)) return false;
             for (Transaction tx : block.getTransactions()) {
                 if (!tx.hasValidSignature()) return false;
+                if (!Transaction.NETWORK.equals(tx.from())) {
+                    PublicKey known = keys.get(tx.from());
+                    if (known == null) {
+                        keys.put(tx.from(), tx.senderKey());
+                    } else if (!known.equals(tx.senderKey())) {
+                        return false;
+                    }
+                }
             }
         }
         return true;

@@ -164,7 +164,8 @@ class BlockchainTest {
         Path file = dir.resolve("chain.dat");
         Blockchain chain = new Blockchain(2);
         chain.minePending("asha");
-        chain.addTransaction(new Transaction("asha", "ravi", 20));
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         Storage.save(chain, file);
 
         Blockchain loaded = Storage.load(file, 2);
@@ -201,5 +202,19 @@ class BlockchainTest {
         Blockchain afterGarbage = Storage.load(file, 2);
         assertEquals(2, afterGarbage.getDifficulty());
         assertEquals(1, afterGarbage.getChain().size());
+    }
+
+    @Test
+    void signingWithDifferentKeyIsRejected() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+        
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 10, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        
+        KeyPair hackerWallet = getWallet();
+        assertThrows(IllegalArgumentException.class, () -> 
+            chain.addTransaction(Transaction.create("asha", "ravi", 10, hackerWallet.getPrivate(), hackerWallet.getPublic()))
+        );
     }
 }
