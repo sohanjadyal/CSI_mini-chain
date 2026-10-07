@@ -87,7 +87,7 @@ public class Blockchain implements Serializable {
     }
 
     public int balanceOf(String person) {
-        return balances().get(person);
+        return balances().getOrDefault(person, 0);
     }
 
     public boolean isValid() {
