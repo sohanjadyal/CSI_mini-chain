@@ -17,7 +17,7 @@ Run it again and it picks up where you left off. The chain is saved to `chain.da
 
 ## The idea
 
-Each block stores some payments, the hash of the previous block, and its own hash. The hash is computed from the block's contents, so changing anything changes it, and the next block's link no longer matches. Mining means trying different nonces until the hash starts with enough zeros, which makes rewriting old blocks expensive.
+Each block stores some payments summarized via a binary Merkle tree root (`merkleRoot`), the hash of the previous block, and its own hash. The hash is computed from the block's header fields (`index|timestamp|previousHash|nonce|merkleRoot`). Mining means trying different nonces until the hash starts with enough zeros, which makes rewriting old blocks expensive.
 
 ## How it's supposed to work
 
@@ -33,7 +33,7 @@ Mining
 - Every block's hash starts with as many zeros as the difficulty.
 
 Validation
-- `isValid()` returns false if anything in any mined block was changed, including block 1.
+- `isValid()` returns false if anything in any mined block was changed, including the Merkle tree root, transactions, digital signatures, difficulty, or block links.
 
 ## Saving
 
@@ -43,7 +43,7 @@ The chain is kept in `chain.dat` and user wallets in `wallets.dat` in the projec
 - Starting the program loads those files, including payments that are still waiting to be mined and registered user keys.
 - A chain that fails the validity check is never written, so the file always holds the last chain that passed. Tamper with a block, quit, and the next run loads the untampered chain.
 - The files are Java serialized objects, so they are binary and you can't read them in a text editor.
-- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead.
+- It is tied to the `Block` and `Transaction` classes. Change either one and the file stops loading, and the program starts a new chain instead (e.g. `Block`'s `serialVersionUID` was bumped to `3L` for `merkleRoot`, so chains saved with `2L` start fresh).
 - Deleting `chain.dat` and `wallets.dat` starts you over.
 
 ## Code

@@ -77,6 +77,7 @@ public class Main {
                             System.out.println("\nBlock " + block.getIndex());
                             System.out.println("  hash:     " + block.getHash());
                             System.out.println("  previous: " + block.getPreviousHash());
+                            System.out.println("  merkle:   " + block.getMerkleRoot());
                             block.getTransactions().forEach(tx -> System.out.println("  " + tx));
                         }
                     }

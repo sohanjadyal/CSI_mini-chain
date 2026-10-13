@@ -96,6 +96,7 @@ public class Blockchain implements Serializable {
         for (int i = 1; i < chain.size(); i++) {
             Block block = chain.get(i);
             Block previous = chain.get(i - 1);
+            if (block.getMerkleRoot() == null || !block.getMerkleRoot().equals(Block.computeMerkleRoot(block.getTransactions()))) return false;
             if (!block.getHash().equals(block.computeHash())) return false;
             if (!block.getPreviousHash().equals(previous.getHash())) return false;
             if (!block.getHash().startsWith(target)) return false;

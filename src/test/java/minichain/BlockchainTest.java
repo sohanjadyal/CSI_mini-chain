@@ -12,6 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 class BlockchainTest {
@@ -31,6 +32,7 @@ class BlockchainTest {
         Blockchain chain = new Blockchain(2);
         assertEquals(1, chain.getChain().size());
         assertEquals("0", chain.getChain().get(0).getPreviousHash());
+        assertEquals(Block.computeMerkleRoot(List.of()), chain.getChain().get(0).getMerkleRoot());
     }
 
     @Test
@@ -324,5 +326,68 @@ class BlockchainTest {
                 freshKeyForAsha.getPrivate(), freshKeyForAsha.getPublic()))
         );
         assertEquals("Transaction uses a different key than the registered key for sender: asha", thrown.getMessage());
+    }
+
+    // ==========================================
+    // Tests for Merkle Root
+    // ==========================================
+
+    @Test
+    void merkleTreeComputesCorrectlyForDifferentTransactionCounts() {
+        // 0 transactions (empty)
+        String root0 = Block.computeMerkleRoot(List.of());
+        assertEquals(Block.sha256(""), root0);
+
+        // 1 transaction: root is sha256(tx.toString())
+        KeyPair w1 = getWallet();
+        Transaction tx1 = Transaction.create("asha", "ravi", 10, w1.getPrivate(), w1.getPublic());
+        String root1 = Block.computeMerkleRoot(List.of(tx1));
+        assertEquals(Block.sha256(tx1.toString()), root1);
+
+        // 2 transactions: sha256(h1 + h2)
+        KeyPair w2 = getWallet();
+        Transaction tx2 = Transaction.create("ravi", "meera", 20, w2.getPrivate(), w2.getPublic());
+        String root2 = Block.computeMerkleRoot(List.of(tx1, tx2));
+        assertEquals(Block.sha256(Block.sha256(tx1.toString()) + Block.sha256(tx2.toString())), root2);
+
+        // 3 transactions: odd duplication for tx3 -> sha256(sha256(h1 + h2) + sha256(h3 + h3))
+        KeyPair w3 = getWallet();
+        Transaction tx3 = Transaction.create("meera", "asha", 30, w3.getPrivate(), w3.getPublic());
+        String root3 = Block.computeMerkleRoot(List.of(tx1, tx2, tx3));
+        String expected3 = Block.sha256(
+            Block.sha256(Block.sha256(tx1.toString()) + Block.sha256(tx2.toString())) +
+            Block.sha256(Block.sha256(tx3.toString()) + Block.sha256(tx3.toString()))
+        );
+        assertEquals(expected3, root3);
+    }
+
+    @Test
+    void tamperingTransactionInvalidatesMerkleRootAndChain() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("asha");
+
+        KeyPair ashaWallet = getWallet();
+        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.minePending("miner");
+
+        Block block = chain.getChain().get(2);
+        // Tamper transaction without updating block Merkle root
+        Transaction original = block.getTransactions().get(0);
+        Transaction modified = new Transaction(original.id(), original.from(), original.to(), original.amount() + 1, original.senderKey(), original.signature());
+        block.getTransactions().set(0, modified);
+
+        // isValid detects that block's stored Merkle root no longer matches transactions
+        assertFalse(chain.isValid());
+    }
+
+    @Test
+    void tamperingMerkleRootDirectlyInvalidatesChain() {
+        Blockchain chain = new Blockchain(2);
+        chain.minePending("miner");
+
+        Block block = chain.getChain().get(1);
+        block.tamperMerkleRoot("0".repeat(64));
+
+        assertFalse(chain.isValid());
     }
 }
