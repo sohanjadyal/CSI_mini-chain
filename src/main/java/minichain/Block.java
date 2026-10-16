@@ -36,7 +36,7 @@ public class Block implements Serializable {
         }
         List<String> tree = new ArrayList<>();
         for (Transaction tx : transactions) {
-            tree.add(sha256(tx.toString()));
+            tree.add(tx.hash());
         }
         while (tree.size() > 1) {
             List<String> nextLevel = new ArrayList<>();
