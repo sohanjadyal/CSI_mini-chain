@@ -10,7 +10,6 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.util.HexFormat;
 import java.util.UUID;
-import java.util.Base64;
 
 // bump version only for incompatible changes, adding a field is safe
 public record Transaction(String id, String from, String to, int amount, PublicKey senderKey, byte[] signature) implements Serializable {
@@ -27,11 +26,11 @@ public record Transaction(String id, String from, String to, int amount, PublicK
     public static Transaction create(String from, String to, int amount, PrivateKey priv, PublicKey pub) {
         try {
             String id = UUID.randomUUID().toString();
-            Signature rsa = Signature.getInstance("SHA256withRSA");
-            rsa.initSign(priv);
-            rsa.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
-            byte[] sig = rsa.sign();
-            return new Transaction(id, from, to, amount, pub, sig);
+            Signature sig = Signature.getInstance("Ed25519");
+            sig.initSign(priv);
+            sig.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
+            byte[] signatureBytes = sig.sign();
+            return new Transaction(id, from, to, amount, pub, signatureBytes);
         } catch (Exception e) {
             throw new RuntimeException("Failed to sign transaction", e);
         }
@@ -41,10 +40,10 @@ public record Transaction(String id, String from, String to, int amount, PublicK
         if (NETWORK.equals(from)) return true;
         if (senderKey == null || signature == null) return false;
         try {
-            Signature rsa = Signature.getInstance("SHA256withRSA");
-            rsa.initVerify(senderKey);
-            rsa.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
-            return rsa.verify(signature);
+            Signature sig = Signature.getInstance("Ed25519");
+            sig.initVerify(senderKey);
+            sig.update((id + from + to + amount).getBytes(StandardCharsets.UTF_8));
+            return sig.verify(signature);
         } catch (Exception e) {
             return false;
         }
@@ -70,6 +69,19 @@ public record Transaction(String id, String from, String to, int amount, PublicK
                 digest.update(signature);
             }
             return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static String deriveAddress(PublicKey key) {
+        if (key == null) {
+            throw new IllegalArgumentException("Public key cannot be null");
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(key.getEncoded());
+            return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }

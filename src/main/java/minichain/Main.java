@@ -18,8 +18,7 @@ public class Main {
         KeyPair wallet = wallets.get(name);
         if (wallet == null) {
             try {
-                KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-                generator.initialize(1024);
+                KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
                 wallet = generator.generateKeyPair();
                 wallets.put(name, wallet);
                 Storage.saveWallets(wallets, WALLETS_FILE);
@@ -28,6 +27,14 @@ public class Main {
             }
         }
         return wallet;
+    }
+
+    private static String resolveAddress(String nameOrAddress) {
+        KeyPair wallet = wallets.get(nameOrAddress);
+        if (wallet != null) {
+            return Blockchain.deriveAddress(wallet.getPublic());
+        }
+        return nameOrAddress;
     }
 
     public static void main(String[] args) {
@@ -60,14 +67,24 @@ public class Main {
                         String from = ask(in, "From: ");
                         String to = ask(in, "To: ");
                         int amount = Integer.parseInt(ask(in, "Amount: "));
-                        KeyPair wallet = getWallet(from);
-                        chain.addTransaction(Transaction.create(from, to, amount, wallet.getPrivate(), wallet.getPublic()));
+                        KeyPair fromWallet = getWallet(from);
+                        String fromAddress = Blockchain.deriveAddress(fromWallet.getPublic());
+                        String toAddress;
+                        if (to.matches("^[0-9a-fA-F]{64}$") && !wallets.containsKey(to)) {
+                            toAddress = to.toLowerCase();
+                        } else {
+                            KeyPair toWallet = getWallet(to);
+                            toAddress = Blockchain.deriveAddress(toWallet.getPublic());
+                        }
+                        chain.addTransaction(Transaction.create(fromAddress, toAddress, amount, fromWallet.getPrivate(), fromWallet.getPublic()));
                         System.out.println("Queued. It's confirmed when the next block is mined.");
                     }
                     case "2" -> {
                         String miner = ask(in, "Your name (you get the " + Blockchain.MINING_REWARD + " coin reward): ");
                         System.out.println("Mining...");
-                        Block block = chain.minePending(miner);
+                        KeyPair minerWallet = getWallet(miner);
+                        String minerAddress = Blockchain.deriveAddress(minerWallet.getPublic());
+                        Block block = chain.minePending(minerAddress);
                         System.out.println("Mined block " + block.getIndex() + " after " + block.getNonce() + " tries: " + block.getHash());
                         Storage.save(chain, SAVE_FILE);
                         Storage.saveWallets(wallets, WALLETS_FILE);
@@ -83,11 +100,19 @@ public class Main {
                     }
                     case "4" -> {
                         System.out.println("Balances (queued payments included):");
-                        chain.balances().forEach((name, coins) -> System.out.println(name + ": " + coins));
+                        Map<String, String> addressToName = new HashMap<>();
+                        for (Map.Entry<String, KeyPair> entry : wallets.entrySet()) {
+                            addressToName.put(Blockchain.deriveAddress(entry.getValue().getPublic()), entry.getKey());
+                        }
+                        chain.balances().forEach((address, coins) -> {
+                            String displayName = addressToName.getOrDefault(address, address);
+                            System.out.println(displayName + ": " + coins);
+                        });
                     }
                     case "5" -> {
                         String name = ask(in, "Name: ");
-                        System.out.println(name + " has " + chain.balanceOf(name) + " coins");
+                        String address = resolveAddress(name);
+                        System.out.println(name + " has " + chain.balanceOf(address) + " coins");
                     }
                     case "6" -> System.out.println(chain.isValid() ? "The chain is valid." : "The chain has been tampered with.");
                     case "7" -> {

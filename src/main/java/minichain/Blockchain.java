@@ -30,11 +30,18 @@ public class Blockchain implements Serializable {
     public int getDifficulty() { return difficulty; }
     public Block latestBlock() { return chain.get(chain.size() - 1); }
 
+    public static String deriveAddress(PublicKey key) {
+        return Transaction.deriveAddress(key);
+    }
+
     public void addTransaction(Transaction tx) {
         if (!tx.hasValidSignature()) {
             throw new IllegalArgumentException("Transaction signature is invalid.");
         }
         if (!Transaction.NETWORK.equals(tx.from())) {
+            if (tx.senderKey() == null || !deriveAddress(tx.senderKey()).equals(tx.from())) {
+                throw new IllegalArgumentException("Transaction 'from' address does not match sender public key: " + tx.from());
+            }
             PublicKey known = knownKeys.get(tx.from());
             if (known == null) {
                 knownKeys.put(tx.from(), tx.senderKey());
@@ -103,6 +110,7 @@ public class Blockchain implements Serializable {
             for (Transaction tx : block.getTransactions()) {
                 if (!tx.hasValidSignature()) return false;
                 if (!Transaction.NETWORK.equals(tx.from())) {
+                    if (tx.senderKey() == null || !deriveAddress(tx.senderKey()).equals(tx.from())) return false;
                     PublicKey known = keys.get(tx.from());
                     if (known == null) {
                         keys.put(tx.from(), tx.senderKey());

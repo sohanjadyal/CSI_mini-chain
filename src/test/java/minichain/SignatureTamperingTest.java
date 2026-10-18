@@ -22,8 +22,7 @@ class SignatureTamperingTest {
 
     private static KeyPair getWallet() {
         try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-            generator.initialize(1024);
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
             return generator.generateKeyPair();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -33,8 +32,9 @@ class SignatureTamperingTest {
     // asha earns 50, pays ravi 20 with a signed payment, then "miner" mines it into block 2.
     private static Blockchain chainWithSignedPayment(KeyPair ashaWallet) {
         Blockchain chain = new Blockchain(DIFFICULTY);
-        chain.minePending("asha");
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("miner");
         return chain;
     }
@@ -87,10 +87,12 @@ class SignatureTamperingTest {
 
     @Test
     void forgedSenderOnSignedPaymentIsRejectedBySignature() {
-        Blockchain chain = chainWithSignedPayment(getWallet());
+        KeyPair wallet = getWallet();
+        Blockchain chain = chainWithSignedPayment(wallet);
+        String asha = Blockchain.deriveAddress(wallet.getPublic());
         List<Transaction> transactions = new ArrayList<>(chain.latestBlock().getTransactions());
         Transaction signed = transactions.get(0);
-        assertEquals("asha", signed.from());
+        assertEquals(asha, signed.from());
 
         transactions.set(0, new Transaction(signed.id(), "hacker", signed.to(), signed.amount(), signed.senderKey(), signed.signature()));
         replaceLatestBlock(chain, transactions);
@@ -115,9 +117,10 @@ class SignatureTamperingTest {
     @Test
     void addTransactionRejectsAlteredAmount() {
         KeyPair asha = getWallet();
+        String ashaAddress = Blockchain.deriveAddress(asha.getPublic());
         Blockchain chain = new Blockchain(DIFFICULTY);
-        chain.minePending("asha");
-        Transaction signed = Transaction.create("asha", "ravi", 10, asha.getPrivate(), asha.getPublic());
+        chain.minePending(ashaAddress);
+        Transaction signed = Transaction.create(ashaAddress, "ravi", 10, asha.getPrivate(), asha.getPublic());
         // 40 is within asha's balance of 50, so only the signature can reject this
         Transaction altered = new Transaction(signed.id(), signed.from(), signed.to(), 40, signed.senderKey(), signed.signature());
 
@@ -129,9 +132,11 @@ class SignatureTamperingTest {
 
     @Test
     void addTransactionRejectsUnsignedPayment() {
+        KeyPair asha = getWallet();
+        String ashaAddress = Blockchain.deriveAddress(asha.getPublic());
         Blockchain chain = new Blockchain(DIFFICULTY);
-        chain.minePending("asha");
-        Transaction unsigned = new Transaction("some-id", "asha", "ravi", 10, null, null);
+        chain.minePending(ashaAddress);
+        Transaction unsigned = new Transaction("some-id", ashaAddress, "ravi", 10, null, null);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(unsigned));
 

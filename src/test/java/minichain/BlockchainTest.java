@@ -19,8 +19,7 @@ class BlockchainTest {
 
     private static KeyPair getWallet() {
         try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-            generator.initialize(1024);
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
             return generator.generateKeyPair();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -52,11 +51,12 @@ class BlockchainTest {
     @Test
     void paymentsMoveCoins() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("meera");
-        assertEquals(30, chain.balanceOf("asha"));
+        assertEquals(30, chain.balanceOf(asha));
         assertEquals(20, chain.balanceOf("ravi"));
         assertEquals(50, chain.balanceOf("meera"));
     }
@@ -64,20 +64,22 @@ class BlockchainTest {
     @Test
     void cannotSpendMoreThanYouHave() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "ravi", 60, ashaWallet.getPrivate(), ashaWallet.getPublic())));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create(asha, "ravi", 60, ashaWallet.getPrivate(), ashaWallet.getPublic())));
     }
 
     @Test
     void cannotMakeNegativePayment() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
 
         assertThrows(IllegalArgumentException.class, () ->
             chain.addTransaction(
-                Transaction.create("asha", "ravi", -10,
+                Transaction.create(asha, "ravi", -10,
                     ashaWallet.getPrivate(), ashaWallet.getPublic())
             )
         );
@@ -86,18 +88,20 @@ class BlockchainTest {
     @Test
     void cannotPayYourself() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "asha", 5, ashaWallet.getPrivate(), ashaWallet.getPublic())));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create(asha, asha, 5, ashaWallet.getPrivate(), ashaWallet.getPublic())));
     }
 
     @Test
     void cannotSpendQueuedCoins() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 40, ashaWallet.getPrivate(), ashaWallet.getPublic()));
-        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create("asha", "meera", 40, ashaWallet.getPrivate(), ashaWallet.getPublic())));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 40, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(Transaction.create(asha, "meera", 40, ashaWallet.getPrivate(), ashaWallet.getPublic())));
         assertEquals(1, chain.getPending().size());
     }
 
@@ -117,8 +121,12 @@ class BlockchainTest {
     @Test
     void tamperedAmountInvalidatesChain() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
-        Block block = chain.getChain().get(1);
+        KeyPair ashaWallet = getWallet();
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.minePending("miner");
+        Block block = chain.getChain().get(2);
         Transaction original = block.getTransactions().get(0);
         
         // Hacker changes the amount to 1,000,000 and keeps the original signature
@@ -134,9 +142,10 @@ class BlockchainTest {
     @Test
     void forgedSenderInvalidatesChain() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("miner");
         
         Block block = chain.getChain().get(2);
@@ -188,15 +197,16 @@ class BlockchainTest {
     void queuedPaymentsStayQueuedAfterReload(@TempDir Path dir) {
         Path file = dir.resolve("chain.dat");
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         Storage.save(chain, file);
 
         Blockchain loaded = Storage.load(file, 2);
         assertEquals(1, loaded.getPending().size());
         assertEquals(2, loaded.getChain().size());
-        assertEquals(30, loaded.balanceOf("asha"));
+        assertEquals(30, loaded.balanceOf(asha));
     }
 
     @Test
@@ -232,14 +242,15 @@ class BlockchainTest {
     @Test
     void signingWithDifferentKeyIsRejected() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
-        
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 10, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+        
+        chain.addTransaction(Transaction.create(asha, "ravi", 10, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         
         KeyPair hackerWallet = getWallet();
         assertThrows(IllegalArgumentException.class, () -> 
-            chain.addTransaction(Transaction.create("asha", "ravi", 10, hackerWallet.getPrivate(), hackerWallet.getPublic()))
+            chain.addTransaction(Transaction.create(asha, "ravi", 10, hackerWallet.getPrivate(), hackerWallet.getPublic()))
         );
     }
 
@@ -275,14 +286,15 @@ class BlockchainTest {
         Path walletsFile = dir.resolve("wallets.dat");
 
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
+        KeyPair ashaWallet = getWallet();
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
 
         Map<String, KeyPair> wallets = new HashMap<>();
-        KeyPair ashaWallet = getWallet();
         wallets.put("asha", ashaWallet);
         Storage.saveWallets(wallets, walletsFile);
 
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("miner");
         Storage.save(chain, chainFile);
 
@@ -290,17 +302,17 @@ class BlockchainTest {
         Blockchain loadedChain = Storage.load(chainFile, 2);
         Map<String, KeyPair> loadedWallets = Storage.loadWallets(walletsFile);
 
-        assertEquals(30, loadedChain.balanceOf("asha"));
+        assertEquals(30, loadedChain.balanceOf(asha));
         KeyPair loadedAshaWallet = loadedWallets.get("asha");
         assertNotNull(loadedAshaWallet);
 
         assertDoesNotThrow(() -> {
-            loadedChain.addTransaction(Transaction.create("asha", "ravi", 10,
+            loadedChain.addTransaction(Transaction.create(asha, "ravi", 10,
                 loadedAshaWallet.getPrivate(), loadedAshaWallet.getPublic()));
         });
 
         loadedChain.minePending("miner");
-        assertEquals(20, loadedChain.balanceOf("asha"));
+        assertEquals(20, loadedChain.balanceOf(asha));
         assertEquals(30, loadedChain.balanceOf("ravi"));
         assertTrue(loadedChain.isValid());
     }
@@ -310,10 +322,11 @@ class BlockchainTest {
         Path chainFile = dir.resolve("chain.dat");
 
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
-
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("miner");
         Storage.save(chain, chainFile);
 
@@ -322,10 +335,10 @@ class BlockchainTest {
         KeyPair freshKeyForAsha = getWallet();
 
         IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, () ->
-            loadedChain.addTransaction(Transaction.create("asha", "ravi", 10,
+            loadedChain.addTransaction(Transaction.create(asha, "ravi", 10,
                 freshKeyForAsha.getPrivate(), freshKeyForAsha.getPublic()))
         );
-        assertEquals("Transaction uses a different key than the registered key for sender: asha", thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("does not match sender public key: " + asha));
     }
 
     // ==========================================
@@ -340,19 +353,22 @@ class BlockchainTest {
 
         // 1 transaction: root is tx1.hash()
         KeyPair w1 = getWallet();
-        Transaction tx1 = Transaction.create("asha", "ravi", 10, w1.getPrivate(), w1.getPublic());
+        String addr1 = Blockchain.deriveAddress(w1.getPublic());
+        Transaction tx1 = Transaction.create(addr1, "ravi", 10, w1.getPrivate(), w1.getPublic());
         String root1 = Block.computeMerkleRoot(List.of(tx1));
         assertEquals(tx1.hash(), root1);
 
         // 2 transactions: sha256(h1 + h2)
         KeyPair w2 = getWallet();
-        Transaction tx2 = Transaction.create("ravi", "meera", 20, w2.getPrivate(), w2.getPublic());
+        String addr2 = Blockchain.deriveAddress(w2.getPublic());
+        Transaction tx2 = Transaction.create(addr2, "meera", 20, w2.getPrivate(), w2.getPublic());
         String root2 = Block.computeMerkleRoot(List.of(tx1, tx2));
         assertEquals(Block.sha256(tx1.hash() + tx2.hash()), root2);
 
         // 3 transactions: odd duplication for tx3 -> sha256(sha256(h1 + h2) + sha256(h3 + h3))
         KeyPair w3 = getWallet();
-        Transaction tx3 = Transaction.create("meera", "asha", 30, w3.getPrivate(), w3.getPublic());
+        String addr3 = Blockchain.deriveAddress(w3.getPublic());
+        Transaction tx3 = Transaction.create(addr3, addr1, 30, w3.getPrivate(), w3.getPublic());
         String root3 = Block.computeMerkleRoot(List.of(tx1, tx2, tx3));
         String expected3 = Block.sha256(
             Block.sha256(tx1.hash() + tx2.hash()) +
@@ -364,10 +380,11 @@ class BlockchainTest {
     @Test
     void tamperingTransactionInvalidatesMerkleRootAndChain() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
-
         KeyPair ashaWallet = getWallet();
-        chain.addTransaction(Transaction.create("asha", "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
+
+        chain.addTransaction(Transaction.create(asha, "ravi", 20, ashaWallet.getPrivate(), ashaWallet.getPublic()));
         chain.minePending("miner");
 
         Block block = chain.getChain().get(2);
@@ -483,5 +500,82 @@ class BlockchainTest {
         tamperedSig[0] ^= 0xFF;
         Transaction tamperedSignature = new Transaction(original.id(), original.from(), original.to(), original.amount(), original.senderKey(), tamperedSig);
         assertNotEquals(originalRoot, Block.computeMerkleRoot(List.of(tamperedSignature)));
+    }
+
+    // =============================================================
+    // Tests for Native Ed25519 & Address Derivation (Issue #31)
+    // =============================================================
+
+    @Test
+    void validEd25519SigningAndVerification() {
+        KeyPair wallet = getWallet();
+        assertTrue("EdDSA".equalsIgnoreCase(wallet.getPublic().getAlgorithm()) || "Ed25519".equalsIgnoreCase(wallet.getPublic().getAlgorithm()));
+
+        String address = Blockchain.deriveAddress(wallet.getPublic());
+        assertNotNull(address);
+        assertEquals(64, address.length());
+        assertTrue(address.matches("^[0-9a-f]{64}$"));
+
+        Transaction tx = Transaction.create(address, "ravi", 25, wallet.getPrivate(), wallet.getPublic());
+        assertTrue(tx.hasValidSignature());
+        assertEquals(64, tx.signature().length); // Ed25519 signatures are 64 bytes
+
+        // Tampering with the signature invalidates it
+        byte[] tamperedSig = tx.signature().clone();
+        tamperedSig[0] ^= 0xFF;
+        Transaction invalidTx = new Transaction(tx.id(), tx.from(), tx.to(), tx.amount(), tx.senderKey(), tamperedSig);
+        assertFalse(invalidTx.hasValidSignature());
+    }
+
+    @Test
+    void rejectionOfTransactionsWhereFromDoesNotMatchDerivedAddress() {
+        Blockchain chain = new Blockchain(2);
+        KeyPair wallet = getWallet();
+        String trueAddress = Blockchain.deriveAddress(wallet.getPublic());
+        chain.minePending(trueAddress);
+
+        // Arbitrary username alias instead of derived address
+        Transaction namedTx = Transaction.create("asha", "ravi", 10, wallet.getPrivate(), wallet.getPublic());
+        IllegalArgumentException err1 = assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(namedTx));
+        assertTrue(err1.getMessage().contains("does not match sender public key"));
+
+        // Another valid hex address belonging to someone else
+        KeyPair otherWallet = getWallet();
+        String otherAddress = Blockchain.deriveAddress(otherWallet.getPublic());
+        Transaction stolenFromTx = Transaction.create(otherAddress, "ravi", 10, wallet.getPrivate(), wallet.getPublic());
+        IllegalArgumentException err2 = assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(stolenFromTx));
+        assertTrue(err2.getMessage().contains("does not match sender public key"));
+    }
+
+    @Test
+    void frontRunningProtectionAcrossAccounts() {
+        Blockchain chain = new Blockchain(2);
+        KeyPair aliceWallet = getWallet();
+        String aliceAddress = Blockchain.deriveAddress(aliceWallet.getPublic());
+        chain.minePending(aliceAddress);
+        assertEquals(50, chain.balanceOf(aliceAddress));
+
+        KeyPair attackerWallet = getWallet();
+        String attackerAddress = Blockchain.deriveAddress(attackerWallet.getPublic());
+
+        // Attacker attempts to spend Alice's coins by using aliceAddress as 'from' signed with attacker's key
+        Transaction attackTx = Transaction.create(aliceAddress, attackerAddress, 25, attackerWallet.getPrivate(), attackerWallet.getPublic());
+        IllegalArgumentException err = assertThrows(IllegalArgumentException.class, () -> chain.addTransaction(attackTx));
+        assertTrue(err.getMessage().contains("does not match sender public key"));
+
+        // Attacker cannot register aliceAddress in knownKeys using attacker's public key
+        assertTrue(chain.getPending().isEmpty());
+        assertEquals(50, chain.balanceOf(aliceAddress));
+
+        // Alice successfully spends her own coins
+        KeyPair bobWallet = getWallet();
+        String bobAddress = Blockchain.deriveAddress(bobWallet.getPublic());
+        Transaction legitTx = Transaction.create(aliceAddress, bobAddress, 25, aliceWallet.getPrivate(), aliceWallet.getPublic());
+        assertDoesNotThrow(() -> chain.addTransaction(legitTx));
+
+        chain.minePending("miner");
+        assertEquals(25, chain.balanceOf(aliceAddress));
+        assertEquals(25, chain.balanceOf(bobAddress));
+        assertTrue(chain.isValid());
     }
 }

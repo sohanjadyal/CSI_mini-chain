@@ -12,8 +12,7 @@ class ReadmeRulesTest {
 
     private static KeyPair getWallet() {
         try {
-            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-            generator.initialize(1024);
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
             return generator.generateKeyPair();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -24,17 +23,18 @@ class ReadmeRulesTest {
     @Test
     void cannotMakeZeroPayment() {
         Blockchain chain = new Blockchain(2);
-        chain.minePending("asha");
         KeyPair ashaWallet = getWallet();
+        String asha = Blockchain.deriveAddress(ashaWallet.getPublic());
+        chain.minePending(asha);
 
         assertThrows(IllegalArgumentException.class, () ->
             chain.addTransaction(
-                Transaction.create("asha", "ravi", 0,
+                Transaction.create(asha, "ravi", 0,
                     ashaWallet.getPrivate(), ashaWallet.getPublic())
             )
         );
         assertTrue(chain.getPending().isEmpty());
-        assertEquals(Blockchain.MINING_REWARD, chain.balanceOf("asha"));
+        assertEquals(Blockchain.MINING_REWARD, chain.balanceOf(asha));
         assertEquals(0, chain.balanceOf("ravi"));
     }
 
