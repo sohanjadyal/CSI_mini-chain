@@ -11,7 +11,7 @@ import java.util.List;
 
 // bump version only for incompatible changes, adding a field is safe
 public class Block implements Serializable {
-    private static final long serialVersionUID = 4L;
+    private static final long serialVersionUID = 5L;
 
     private final int index;
     private final long timestamp;
