@@ -16,7 +16,7 @@ public class Main {
 
     static KeyPair getWallet(String name) {
         KeyPair wallet = wallets.get(name);
-        if (wallet == null) {
+        if (wallet == null || !Storage.isEd25519(wallet)) {
             try {
                 KeyPairGenerator generator = KeyPairGenerator.getInstance("Ed25519");
                 wallet = generator.generateKeyPair();

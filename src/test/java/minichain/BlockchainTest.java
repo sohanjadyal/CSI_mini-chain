@@ -281,6 +281,50 @@ class BlockchainTest {
     }
 
     @Test
+    void oldRsaWalletsAreDiscardedCleanly(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("wallets.dat");
+        KeyPairGenerator rsaGen = KeyPairGenerator.getInstance("RSA");
+        rsaGen.initialize(1024);
+        KeyPair rsaWallet = rsaGen.generateKeyPair();
+
+        Map<String, KeyPair> oldWallets = new HashMap<>();
+        oldWallets.put("asha", rsaWallet);
+        Storage.saveWallets(oldWallets, file);
+
+        // When loaded, old RSA wallets from #25 are discarded cleanly
+        Map<String, KeyPair> loaded = Storage.loadWallets(file);
+        assertFalse(loaded.containsKey("asha"));
+        assertTrue(loaded.isEmpty());
+    }
+
+    @Test
+    void mixedWalletsDiscardRsaKeysAndKeepEd25519Keys(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("wallets.dat");
+        KeyPairGenerator rsaGen = KeyPairGenerator.getInstance("RSA");
+        rsaGen.initialize(1024);
+        KeyPair rsaWallet = rsaGen.generateKeyPair();
+
+        KeyPair edWallet = getWallet();
+
+        Map<String, KeyPair> mixed = new HashMap<>();
+        mixed.put("asha", rsaWallet);
+        mixed.put("ravi", edWallet);
+        Storage.saveWallets(mixed, file);
+
+        Map<String, KeyPair> loaded = Storage.loadWallets(file);
+        assertEquals(1, loaded.size());
+        assertFalse(loaded.containsKey("asha"));
+        assertTrue(loaded.containsKey("ravi"));
+        assertEquals(edWallet.getPublic(), loaded.get("ravi").getPublic());
+
+        // Signing with the retained Ed25519 wallet works and does NOT throw InvalidKeyException
+        String raviAddr = Blockchain.deriveAddress(loaded.get("ravi").getPublic());
+        assertDoesNotThrow(() ->
+            Transaction.create(raviAddr, "meera", 10, loaded.get("ravi").getPrivate(), loaded.get("ravi").getPublic())
+        );
+    }
+
+    @Test
     void reloadedWalletCanSpendAcrossSimulatedRestart(@TempDir Path dir) {
         Path chainFile = dir.resolve("chain.dat");
         Path walletsFile = dir.resolve("wallets.dat");

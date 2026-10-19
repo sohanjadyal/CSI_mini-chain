@@ -62,6 +62,16 @@ final class Storage {
         }
     }
 
+    static boolean isEd25519(KeyPair kp) {
+        if (kp == null || kp.getPublic() == null || kp.getPrivate() == null) {
+            return false;
+        }
+        String pubAlg = kp.getPublic().getAlgorithm();
+        String privAlg = kp.getPrivate().getAlgorithm();
+        return ("Ed25519".equalsIgnoreCase(pubAlg) || "EdDSA".equalsIgnoreCase(pubAlg))
+            && ("Ed25519".equalsIgnoreCase(privAlg) || "EdDSA".equalsIgnoreCase(privAlg));
+    }
+
     @SuppressWarnings("unchecked")
     static Map<String, KeyPair> loadWallets(Path file) {
         if (Files.notExists(file)) {
@@ -69,8 +79,24 @@ final class Storage {
         }
         try (ObjectInputStream in = new ObjectInputStream(Files.newInputStream(file))) {
             Map<String, KeyPair> wallets = (Map<String, KeyPair>) in.readObject();
-            System.out.println("Loaded " + file + ".");
-            return wallets != null ? new HashMap<>(wallets) : new HashMap<>();
+            if (wallets == null) {
+                return new HashMap<>();
+            }
+            Map<String, KeyPair> cleanWallets = new HashMap<>();
+            boolean discardedOld = false;
+            for (Map.Entry<String, KeyPair> entry : wallets.entrySet()) {
+                if (isEd25519(entry.getValue())) {
+                    cleanWallets.put(entry.getKey(), entry.getValue());
+                } else {
+                    discardedOld = true;
+                }
+            }
+            if (discardedOld) {
+                System.out.println(file + " held old or incompatible keys (e.g. RSA from an earlier version), so they were cleanly discarded.");
+            } else {
+                System.out.println("Loaded " + file + ".");
+            }
+            return cleanWallets;
         } catch (IOException | ClassNotFoundException | ClassCastException e) {
             System.out.println("Couldn't read " + file + " (" + e.getClass().getSimpleName() + "), so empty wallets were started.");
             return new HashMap<>();
